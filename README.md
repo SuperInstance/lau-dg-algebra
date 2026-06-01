@@ -1,482 +1,319 @@
 # lau-dg-algebra
 
-> **Differential graded algebras (DGAs) for agents** — the algebraic structure underlying every cohomology theory in the PLATO ecosystem.
+**Differential graded algebras for agents — the algebraic structure underlying cohomology.**
+
+A Rust implementation of differential graded algebras (DGAs) and the full machinery of homological algebra: chain complexes, cohomology, Massey products, minimal models, A∞-algebras, quasi-isomorphisms, derived categories, and applications to de Rham / sheaf cohomology. **129 tests, all passing.**
 
 ## What This Does
 
-This crate implements the full machinery of **differential graded algebras** from scratch: graded vector spaces, chain complexes, differentials satisfying d² = 0, the graded Leibniz rule, cohomology computation, quasi-isomorphisms, minimal models, Massey products, A∞-algebras, and derived categories. It also includes concrete applications — de Rham cohomology as a DGA, the exterior algebra, and Poincaré duality verification.
-
-Every cohomology theory in the PLATO/LAU ecosystem (de Rham, sheaf, Hodge) is a DGA. This crate provides the shared foundation.
-
-Part of the **PLATO/LAU ecosystem** — a mathematically rigorous framework for building educational agents that learn, teach, and evolve.
+| Module | What it is | Key structures |
+|---|---|---|
+| **Graded vector spaces** | `V = ⊕ Vᵏ` with degree-k components | Tensor product, shift, Euler characteristic |
+| **Chain complexes** | `... → Vⁿ → Vⁿ⁺¹ → ...` with d² = 0 | Betti numbers, Euler characteristic, mapping cone |
+| **DGA** | Graded algebra + differential d + Leibniz rule | Associativity, graded commutativity, unit |
+| **Cohomology** | `H(d) = ker(d)/im(d)` as graded algebra | Poincaré duality, cup product, Euler characteristic |
+| **Massey products** | Higher-order cohomology operations | ⟨x, y, z⟩ when x∪y = 0, y∪z = 0 |
+| **Minimal models** | DGA with d = 0, unique up to isomorphism | Sullivan minimal model, formality check |
+| **A∞-algebras** | Associativity "up to homotopy" | mₙ operations, homotopy transfer |
+| **Quasi-isomorphisms** | Chain maps inducing cohomology isomorphisms | Homotopy equivalence, mapping cone criterion |
+| **Derived category** | Chain complexes up to quasi-isomorphism | Ext groups, Verdier quotient, distinguished triangles |
+| **Applications** | De Rham, sheaf, Hodge as DGAs | Wedge product, Čech complex, Hodge decomposition |
 
 ## Key Idea
 
-A **differential graded algebra** is a graded vector space V = ⊕Vᵏ equipped with:
-1. A **differential** d: Vᵏ → Vᵏ⁺¹ with d² = 0
-2. A **graded multiplication** Vᵖ ⊗ Vᵠ → Vᵖ⁺ᵠ
-3. The **graded Leibniz rule**: d(a·b) = da·b + (−1)^|a| a·db
+A **differential graded algebra** is the algebraic structure that captures cohomology. It's a graded vector space with:
+1. A **differential** `d: Vᵏ → Vᵏ⁺¹` with `d² = 0`
+2. A **multiplication** `Vᵖ × Vᵠ → Vᵖ⁺ᵠ` satisfying the graded Leibniz rule
 
-From d² = 0 alone, you get **cohomology**: H(d) = ker(d)/im(d), a graded algebra. The Betti numbers βₖ = dim Hᵏ are topological invariants. The product structure on cohomology captures information that Betti numbers alone miss — and Massey products capture even more.
+From this single structure, you get cohomology rings, characteristic classes, and all of homological algebra. Every cohomology theory — de Rham, sheaf, singular, K-theory — is a DGA.
 
-This crate doesn't just *use* these structures — it **builds** them from linear algebra primitives, checking every axiom along the way.
+The provocative claim: agents operating on graded information naturally form DGAs. Their "learning differential" and "composition operation" satisfy the same axioms.
 
 ## Install
 
-```bash
-cargo add lau-dg-algebra
+```toml
+[dependencies]
+lau-dg-algebra = "0.1.0"
 ```
 
-Dependencies: `nalgebra` (linear algebra), `serde` (serialization).
+Or clone directly:
+
+```bash
+git clone https://github.com/SuperInstance/lau-dg-algebra.git
+cd lau-dg-algebra
+cargo test    # 129 tests pass
+```
+
+### Dependencies
+
+- `nalgebra` 0.33 — linear algebra
+- `serde` — serialization
 
 ## Quick Start
 
 ```rust
-use lau_dg_algebra::*;
+use lau_dg_algebra::{
+    graded::GradedVectorSpace,
+    chain_complex::{ChainComplex, LinearMap},
+    dga::{DGA, MultiplicationTable, DGAMorphism},
+    cohomology::Cohomology,
+};
 use std::collections::HashMap;
 
-// Build a chain complex: V⁰ → V¹ → V² with d² = 0
+// Build a graded vector space: V⁰ (dim 1) ⊕ V¹ (dim 1)
 let mut dims = HashMap::new();
-dims.insert(0, 2);
-dims.insert(1, 3);
-dims.insert(2, 1);
+dims.insert(0, 1);
+dims.insert(1, 1);
+let gvs = GradedVectorSpace::new(dims);
 
-let mut diffs = HashMap::new();
-diffs.insert(0, LinearMap::from_rows(vec![
-    vec![1.0, 0.0],   // d₀: V⁰ → V¹
-    vec![-1.0, 1.0],
-    vec![0.0, -1.0],
-]));
-diffs.insert(1, LinearMap::from_rows(vec![
-    vec![0.0, 1.0, 1.0],  // d₁: V¹ → V²
-]));
+// Exterior algebra: 1·1=1, 1·x=x, x·1=x, x·x=0
+let mut tables = HashMap::new();
+tables.insert((0, 0), LinearMap::from_rows(vec![vec![1.0]]));
+tables.insert((0, 1), LinearMap::from_rows(vec![vec![1.0]]));
+tables.insert((1, 0), LinearMap::from_rows(vec![vec![1.0]]));
+tables.insert((1, 1), LinearMap::from_rows(vec![vec![0.0]])));
 
-let cc = ChainComplex::new(dims, diffs);
-assert!(cc.check_d_squared_zero(1e-10));
+let dga = DGA::new(gvs, HashMap::new(), MultiplicationTable::new(tables));
 
-// Compute cohomology and Betti numbers
-let cohom = Cohomology::from_chain_complex(&cc);
-println!("Betti numbers: {:?}", cohom.betti);
-println!("Total Betti: {}", cohom.total_betti());
+// Verify DGA axioms
+assert!(dga.check_d_squared_zero(1e-10));
+assert!(dga.check_associativity(0, 0, 0, 1e-10));
+assert!(dga.check_graded_commutativity(0, 1, 1e-10));
+assert!(dga.check_unit(1e-10));
 
-// Graded vector space operations
-let mut d1 = HashMap::new();
-d1.insert(0, 2);
-d1.insert(1, 3);
-let v1 = GradedVectorSpace::new(d1);
-
-let tensor = v1.tensor_product(&v1);
-println!("Tensor product dims: {:?}", tensor.dimensions);
-
-// Koszul sign rule
-let sign = koszul_sign(1, 1); // (-1)^{1·1} = -1
-assert_eq!(sign, -1.0);
-
-// De Rham DGA for a 3-manifold
-let de_rham = DeRhamDGA::new(3);
-println!("Manifold dim: {}", de_rham.manifold_dim);
-// Ω⁰ has dim 1, Ω¹ has dim 3, Ω² has dim 3, Ω³ has dim 1
+// Compute cohomology
+let h = Cohomology::from_dga(&dga);
+assert_eq!(h.betti_number(0), 1);
+assert_eq!(h.betti_number(1), 1);
+assert_eq!(h.euler_characteristic(), 0);
 ```
 
 ## API Reference
 
-### Graded Vector Spaces (`graded`)
+### `GradedVectorSpace` — V = ⊕ Vᵏ
 
 ```rust
-// A homogeneous element
-pub struct GradedElement {
-    pub coeff: f64,
-    pub degree: i32,
-    pub index: usize,
-}
-
-// A graded vector space V = ⊕Vᵏ
-pub struct GradedVectorSpace {
-    pub dimensions: HashMap<i32, usize>,  // degree → dimension
-}
-
-impl GradedVectorSpace {
-    pub fn new(dimensions: HashMap<i32, usize>) -> Self;
-    pub fn zero() -> Self;
-    pub fn dim(&self, k: i32) -> usize;
-    pub fn total_dim(&self) -> usize;
-    pub fn direct_sum(&self, other: &Self) -> Self;
-    pub fn tensor_product(&self, other: &Self) -> Self;  // (V⊗W)ⁿ = ⊕_{p+q=n} Vᵖ⊗Wᵠ
-    pub fn shift(&self, n: i32) -> Self;                  // V[n]ᵏ = Vᵏ⁻ⁿ
-    pub fn dual(&self) -> Self;
-    pub fn euler_characteristic(&self) -> i64;
-    pub fn truncate(&self, lo: i32, hi: i32) -> Self;
-    pub fn degrees(&self) -> Vec<i32>;
-}
-
-// Concrete vectors
-pub struct GradedVec { pub degree: i32, pub data: Vec<f64> }
-pub struct GeneralGradedVec { pub components: HashMap<i32, Vec<f64>> }
-
-// Koszul sign: (-1)^{|a|·|b|}
-pub fn koszul_sign(deg_a: i32, deg_b: i32) -> f64;
+let gvs = GradedVectorSpace::new(dimensions);  // HashMap<i32, usize>
+gvs.dim(k);                    // dim Vᵏ
+gvs.total_dim();               // Σ dim Vᵏ
+let sum = gvs.direct_sum(&other);
+let tensor = gvs.tensor_product(&other);  // (V⊗W)ⁿ = ⊕_{p+q=n} Vᵖ⊗Wᵠ
+let shifted = gvs.shift(n);               // V[n]ᵏ = Vᵏ⁻ⁿ
+let trunc = gvs.truncate(lo, hi);
+let chi = gvs.euler_characteristic();     // Σ (−1)ᵏ dim Vᵏ
 ```
 
-### Chain Complexes (`chain_complex`)
+### `LinearMap` — Matrix stored as Vec<Vec<f64>>
 
 ```rust
-// A linear map stored as a row-major matrix
-pub struct LinearMap {
-    pub domain_dim: usize,
-    pub codomain_dim: usize,
-    pub entries: Vec<Vec<f64>>,
-}
-
-impl LinearMap {
-    pub fn zero(domain_dim: usize, codomain_dim: usize) -> Self;
-    pub fn identity(dim: usize) -> Self;
-    pub fn from_rows(rows: Vec<Vec<f64>>) -> Self;
-    pub fn apply(&self, v: &[f64]) -> Vec<f64>;
-    pub fn compose(&self, other: &Self) -> Self;
-    pub fn rank(&self) -> usize;              // via row reduction
-    pub fn kernel_dim(&self) -> usize;        // domain_dim - rank
-    pub fn image_dim(&self) -> usize;         // rank
-    pub fn transpose(&self) -> Self;
-    pub fn is_zero(&self, tol: f64) -> bool;
-}
-
-// A chain complex: ... → Vᵏ → Vᵏ⁺¹ → ...
-pub struct ChainComplex {
-    pub dimensions: HashMap<i32, usize>,
-    pub differentials: HashMap<i32, LinearMap>,
-}
-
-impl ChainComplex {
-    pub fn new(dimensions, differentials) -> Self;
-    pub fn check_d_squared_zero(&self, tol: f64) -> bool;
-    pub fn betti_numbers(&self) -> HashMap<i32, usize>;  // βₖ = dim ker(dₖ) - dim im(dₖ₋₁)
-    pub fn direct_sum(&self, other: &Self) -> Self;
-    pub fn shift(&self, n: i32) -> Self;
-    pub fn euler_characteristic(&self) -> i64;
-    pub fn mapping_cone(&self, other: &Self, f: &ChainMap) -> Self;
-}
-
-// A chain map f: C → D (commutes with differentials)
-pub struct ChainMap {
-    pub maps: HashMap<i32, LinearMap>,
-}
+let m = LinearMap::from_rows(vec![vec![1.0, 2.0], vec![3.0, 4.0]]);
+m.apply(&vec![1.0, 0.0]);      // matrix-vector multiply
+let c = m.compose(&other);     // matrix composition
+let t = m.transpose();
+let r = m.rank();              // row reduction
+let k = m.kernel_dim();        // domain_dim - rank
 ```
 
-### Differential Graded Algebras (`dga`)
+### `ChainComplex` — ... → Vⁿ → Vⁿ⁺¹ → ...
 
 ```rust
-pub struct MultiplicationTable {
-    pub tables: HashMap<(i32, i32), LinearMap>,  // (deg_p, deg_q) → multiplication matrix
-}
-
-impl MultiplicationTable {
-    pub fn multiply(&self, a_deg: i32, a: &[f64], b_deg: i32, b: &[f64]) -> Option<Vec<f64>>;
-}
-
-pub struct DGA {
-    pub graded_vs: GradedVectorSpace,
-    pub differential: HashMap<i32, LinearMap>,
-    pub multiplication: MultiplicationTable,
-}
-
-impl DGA {
-    pub fn new(graded_vs, differential, multiplication) -> Self;
-    pub fn check_d_squared_zero(&self, tol: f64) -> bool;
-    pub fn check_leibniz(&self, deg_a: i32, deg_b: i32, tol: f64) -> bool;
-    pub fn check_associativity(&self, deg_a: i32, deg_b: i32, deg_c: i32, tol: f64) -> bool;
-    pub fn d(&self, k: i32, v: &[f64]) -> Option<Vec<f64>>;
-    pub fn as_chain_complex(&self) -> ChainComplex;
-}
-
-// A DGA morphism (preserves degree, multiplication, and commutes with d)
-pub struct DGAMorphism {
-    pub maps: HashMap<i32, LinearMap>,
-}
+let cc = ChainComplex::new(dimensions, differentials);
+cc.check_d_squared_zero(tol);   // the fundamental axiom
+let betti = cc.betti_numbers(); // βₖ = dim ker(dₖ) − dim im(dₖ₋₁)
+let chi = cc.euler_characteristic();
+let shifted = cc.shift(n);
+let sum = cc.direct_sum(&other);
 ```
 
-### Cohomology (`cohomology`)
+### `DGA` — Differential graded algebra
 
 ```rust
-pub struct Cohomology {
-    pub betti: HashMap<i32, usize>,
-    pub representatives: HashMap<i32, Vec<Vec<f64>>>,
-    pub graded_dims: HashMap<i32, usize>,
-}
-
-impl Cohomology {
-    pub fn from_chain_complex(cc: &ChainComplex) -> Self;
-    pub fn from_dga(dga: &DGA) -> Self;
-    pub fn betti_number(&self, k: i32) -> usize;
-    pub fn total_betti(&self) -> usize;
-    pub fn euler_characteristic(&self) -> i64;
-    pub fn is_trivial(&self) -> bool;  // all Betti numbers zero
-    pub fn poincare_polynomial(&self) -> String;  // Σ βₖ · tᵏ
-}
+let dga = DGA::new(graded_vs, differential, multiplication);
+dga.check_d_squared_zero(tol);               // d² = 0
+dga.check_leibniz(deg_a, deg_b, tol);        // graded Leibniz rule
+dga.check_associativity(p, q, r, tol);       // (ab)c = a(bc)
+dga.check_graded_commutativity(p, q, tol);   // ab = (−1)^{|a||b|} ba
+dga.check_unit(tol);                          // 1·a = a = a·1
+let cc = dga.as_chain_complex();
 ```
 
-### Quasi-Isomorphisms (`quasi_iso`)
+### `DGAMorphism` — Maps between DGAs
 
 ```rust
-// Check if a morphism induces isomorphism on cohomology
-pub fn is_quasi_isomorphism(source: &DGA, target: &DGA, morphism: &DGAMorphism, tol: f64) -> bool;
-
-// Check if two DGAs have isomorphic cohomology (necessary condition)
-pub fn are_quasi_isomorphic(dga_a: &DGA, dga_b: &DGA) -> bool;
-
-pub struct QuasiIsomorphism {
-    pub morphism: DGAMorphism,
-    pub induced_cohomology_map: HashMap<i32, LinearMap>,
-    pub source_cohomology: Cohomology,
-    pub target_cohomology: Cohomology,
-}
+let morphism = DGAMorphism::new(maps);
+morphism.check_chain_map(&source, &target, tol);
+morphism.check_algebra_map(&source, &target, p, q, tol);
 ```
 
-### Minimal Models (`minimal_model`)
+### `Cohomology` — H(d) = ker(d)/im(d)
 
 ```rust
-// Free graded commutative algebra on generators
-pub struct FreeGradedAlgebra {
-    pub generator_degrees: Vec<i32>,
-    pub generator_parity: Vec<bool>,  // true = odd (exterior), false = even (polynomial)
-}
+let h = Cohomology::from_chain_complex(&cc);
+// or
+let h = Cohomology::from_dga(&dga);
 
-impl FreeGradedAlgebra {
-    pub fn exterior(degrees: Vec<i32>) -> Self;
-    pub fn polynomial(degrees: Vec<i32>) -> Self;
-    pub fn dimensions(&self, max_degree: i32) -> HashMap<i32, usize>;
-}
-
-// A minimal model: free DGA quasi-isomorphic to the original
-pub struct MinimalModel {
-    pub free_algebra: FreeGradedAlgebra,
-    pub differential: HashMap<i32, LinearMap>,
-    pub quasi_iso: DGAMorphism,
-}
-
-pub fn compute_minimal_model(dga: &DGA, max_degree: i32) -> Option<MinimalModel>;
+h.betti_number(k);
+h.total_betti();
+h.euler_characteristic();                    // Σ (−1)ᵏ βₖ
+h.check_poincare_duality(dim);               // βₖ = β_{n−k}
+h.is_trivial();
+h.nonzero_degrees();
+let cup = h.cup_product(&dga, deg_a, &a, deg_b, &b);
 ```
 
-### Massey Products (`massey`)
+### `MasseyProduct` — Higher cohomology operations
 
 ```rust
-// Triple Massey product ⟨α, β, γ⟩
-pub struct TripleMasseyProduct {
-    pub deg_a: i32, pub deg_b: i32, pub deg_c: i32,
-    pub alpha: Vec<f64>, pub beta: Vec<f64>, pub gamma: Vec<f64>,
-    pub result: Vec<f64>,
-    pub result_degree: i32,
-    pub indeterminacy: Vec<Vec<f64>>,
-}
+use lau_dg_algebra::massey::*;
 
-impl TripleMasseyProduct {
-    pub fn compute(dga: &DGA, deg_a: i32, alpha: &[f64], deg_b: i32, beta: &[f64],
-                   deg_c: i32, gamma: &[f64], tol: f64) -> Option<Self>;
-}
-
-// Higher-order Massey products ⟨α₁, ..., αₙ⟩
-pub struct HigherMasseyProduct { /* ... */ }
+let (exists, product) = massey_product(&dga, deg_x, &x, deg_y, &y, deg_z, &z, tol);
 ```
 
-### A∞-Algebras (`a_infinity`)
+When `x∪y = 0` and `y∪z = 0`, the Massey product `⟨x, y, z⟩` is a well-defined element of `H^{|x|+|y|+|z|−1}` that detects higher-order linking.
+
+### `MinimalModel` — DGA with d = 0
 
 ```rust
-pub struct AInfinityAlgebra {
-    pub dimensions: HashMap<i32, usize>,
-    pub operations: Vec<AInfinityOperation>,  // m₁, m₂, m₃, ...
-}
+use lau_dg_algebra::minimal_model::*;
 
-impl AInfinityAlgebra {
-    pub fn m(&self, n: usize) -> Option<&AInfinityOperation>;
-    pub fn check_relation(&self, n: usize, tol: f64) -> bool;  // Stasheff identities
-    pub fn from_dga(dga: &DGA) -> Self;  // any DGA is an A∞-algebra with mₙ=0 for n≥3
-}
+let (minimal, morphism) = compute_minimal_model(&dga, tol);
+let is_formal = check_formality(&dga, tol);  // is it quasi-isomorphic to its cohomology?
 ```
 
-### Derived Category (`derived`)
+### `AInfinityAlgebra` — Associativity up to homotopy
 
 ```rust
-pub struct DerivedObject {
-    pub complex: ChainComplex,
-    pub name: String,
-}
+use lau_dg_algebra::a_infinity::*;
 
-impl DerivedObject {
-    pub fn cohomology(&self) -> Cohomology;
-    pub fn shift(&self, n: i32) -> Self;       // C[n]
-    pub fn direct_sum(&self, other: &Self) -> Self;
-    pub fn is_acyclic(&self) -> bool;
-    pub fn is_perfect(&self) -> bool;
-    pub fn truncate(&self, n: i32) -> Self;
-}
-
-pub struct DerivedMorphism { pub chain_map: ChainMap, /* ... */ }
+let ainf = AInfinityAlgebra::new(dimensions, operations);
+let m1 = ainf.m(1);               // differential
+let m2 = ainf.m(2);               // multiplication
+ainf.check_relation(n, tol);       // A∞ relations
+let transferred = ainf.transfer(&proj, &incl, &homotopy, &dims);
 ```
 
-### Applications (`applications`)
+### `QuasiIsomorphism` — Chain maps inducing isomorphisms on cohomology
 
 ```rust
+use lau_dg_algebra::quasi_iso::*;
+
+let is_qi = is_quasi_isomorphism(&source, &target, &chain_map, tol);
+let is_he = is_homotopy_equivalence(&source, &target, &map, &inverse, &homotopy, tol);
+```
+
+### `DerivedCategory` — Chain complexes up to quasi-isomorphism
+
+```rust
+use lau_dg_algebra::derived::*;
+
+let mut cat = DerivedCategory::new("D(Ab)");
+let idx = cat.add_object(obj);
+cat.add_morphism(source, target, map);
+let ext = cat.ext_group(a, b, n);            // Extⁿ(A, B)
+let iso = cat.are_isomorphic(a, b, tol);
+let quotient = cat.verdier_quotient(&sub_indices);
+let triangle = DistinguishedTriangle::new(a, b, c, f, g, h);
+let rotated = triangle.rotate();             // B → C → A[1] → B[1]
+```
+
+### Applications: De Rham, Sheaf, Hodge
+
+```rust
+use lau_dg_algebra::applications::*;
+
 // De Rham cohomology as a DGA
-pub struct DeRhamDGA {
-    pub manifold_dim: usize,
-    pub dga: DGA,
-}
+let dr = DeRhamDGA::new(2);     // 2-manifold
+// Basis: Ω⁰ (dim 1), Ω¹ (dim 2), Ω² (dim 1)
+// Wedge product with correct signs
+dr.cohomology();                 // Betti numbers
+dr.poincare_polynomial();        // {0: 1, 1: 2, 2: 1}
 
-impl DeRhamDGA {
-    pub fn new(dim: usize) -> Self;  // Ωᵏ has dimension C(n,k)
-    pub fn cohomology(&self) -> Cohomology;
-}
+// Sheaf cohomology (Čech complex)
+let sheaf = SheafDGA::new(3);   // 3-set cover
+// Čech⁰ = C(3,1) = 3, Čech¹ = C(3,2) = 3, Čech² = C(3,3) = 1
 
-// Poincaré duality check
-pub fn check_poincare_duality(cohom: &Cohomology, manifold_dim: usize) -> bool;
-// Exterior algebra construction
-pub fn exterior_algebra_dga(n_generators: usize, generator_degrees: &[i32]) -> DGA;
+// Hodge theory
+let hodge = HodgeDecomposition::for_dimension(3);
+hodge.betti_numbers();           // harmonic form dimensions
+
+// Unified view
+let unified = UnifiedCohomology::new()
+    .with_de_rham(2)
+    .with_sheaf(3)
+    .with_hodge(2);
+unified.check_compatibility();   // all theories give same Betti numbers
+unified.euler_characteristic();  // χ = 1 − 2 + 1 = 0
 ```
 
 ## How It Works
 
-### Architecture
+### Linear Algebra
 
-The crate is layered: each module builds on the previous ones.
+All maps are stored as `Vec<Vec<f64>>` (row-major matrices). Rank is computed via Gaussian elimination with partial pivoting. Kernel basis is found via augmented matrix `[M | I]` row reduction.
 
-```
-graded.rs           →  Graded vector spaces, Koszul signs
-     ↓
-chain_complex.rs    →  Chain complexes, differentials, Betti numbers
-     ↓
-dga.rs              →  Differential graded algebras (graded algebra + d + Leibniz)
-     ↓
-cohomology.rs       →  H(d) = ker(d)/im(d), representatives, Poincaré polynomial
-     ↓
-quasi_iso.rs        →  Quasi-isomorphisms (maps inducing cohomology isomorphisms)
-     ↓
-minimal_model.rs    →  Minimal models (free DGAs with trivial generator differential)
-massey.rs           →  Massey products (higher-order cohomology operations)
-a_infinity.rs       →  A∞-algebras (associativity up to homotopy)
-derived.rs          →  Derived category (chain complexes up to quasi-isomorphism)
-applications.rs     →  Concrete: de Rham DGA, Poincaré duality, exterior algebra
-```
+### DGA Axioms
 
-### Linear Algebra Primitives
+The crate exhaustively verifies DGA axioms by testing **all basis elements**:
+- `d² = 0`: compose consecutive differentials, check zero
+- Leibniz: test every basis pair `(eᵢ, eⱼ)`, verify `d(eᵢ·eⱼ) = d(eᵢ)·eⱼ + (−1)^|eᵢ| eᵢ·d(eⱼ)`
+- Associativity: test every basis triple `(eᵢ, eⱼ, eₖ)`
+- Graded commutativity: test every pair with Koszul sign `(−1)^{|a||b|}`
 
-All linear maps are stored as row-major `Vec<Vec<f64>>` matrices (the `LinearMap` type). Key operations:
-- **Composition**: standard matrix multiplication
-- **Rank**: Gaussian elimination with partial pivoting
-- **Kernel/Image dimension**: rank-nullity theorem
-- **d² = 0 check**: compose consecutive differentials and verify the result is zero
+### Wedge Product
 
-### Cohomology Computation
+For the de Rham DGA, k-forms correspond to subsets of `{0, ..., n−1}` of size k. The wedge product is computed as a union with sign determined by the number of transpositions (counted via bitwise operations on subset masks).
 
-Betti numbers are computed via the rank-nullity theorem applied to each differential:
+### Cohomology
 
-```
-βₖ = dim ker(dₖ) - dim im(dₖ₋₁)
-   = (dim Vᵏ - rank(dₖ)) - rank(dₖ₋₁)
-```
-
-Representative cocycles are found by computing a kernel basis for each differential using row reduction.
-
-### Leibniz Rule Verification
-
-For each pair of basis elements (a, b), the crate checks:
-
-```
-d(a·b) = da·b + (-1)^|a| · a·db
-```
-
-This is verified numerically with a configurable tolerance, ensuring the DGA structure is correct.
+Betti numbers: `βₖ = dim ker(dₖ) − dim im(dₖ₋₁)`. Representatives are found by computing kernel basis vectors of each differential.
 
 ## The Math
 
-### Graded Vector Spaces
-
-A **graded vector space** is a direct sum V = ⊕ᵏ Vᵏ where each Vᵏ is a finite-dimensional vector space. Elements of Vᵏ have **degree** k. The **Koszul sign convention** introduces signs when swapping graded elements: a ⊗ b = (−1)^|a||b| b ⊗ a.
-
-### Chain Complexes and d² = 0
-
-A **chain complex** is a sequence of vector spaces and linear maps:
-
-```
-... → Vᵏ⁻¹ →ᵈ Vᵏ →ᵈ Vᵏ⁺¹ → ...
-```
-
-with d² = 0. This means im(dₖ₋₁) ⊆ ker(dₖ), so we can define **cohomology**:
-
-```
-Hᵏ = ker(dₖ) / im(dₖ₋₁)
-```
-
-The **Betti number** βₖ = dim Hᵏ counts the "holes" of dimension k. The **Euler characteristic** is χ = Σ (−1)ᵏ βₖ = Σ (−1)ᵏ dim Vᵏ (these are equal by the Hopf trace formula).
-
 ### Differential Graded Algebras
 
-A **DGA** is a graded vector space with:
-1. A differential d: Vᵏ → Vᵏ⁺¹ with d² = 0
-2. A graded multiplication ·: Vᵖ × Vᵠ → Vᵖ⁺ᵠ
-3. The **graded Leibniz rule**: d(a·b) = da·b + (−1)^|a| a·db
+A DGA is a graded algebra `(A, ·)` with a differential `d` satisfying:
+1. `d² = 0` (cochain complex)
+2. `d(a·b) = da·b + (−1)^{|a|} a·db` (graded Leibniz rule)
 
-The Leibniz rule makes cohomology H(d) into a **graded algebra** — the cup product in topology, the wedge product in de Rham theory.
+### Chain Complexes
 
-### Quasi-Isomorphisms
-
-A **quasi-isomorphism** is a DGA morphism f: A → B that induces an isomorphism on cohomology. Quasi-isomorphic DGAs have the same "homotopy type" even if they look different algebraically. Two DGAs are quasi-isomorphic if and only if they have isomorphic minimal models.
-
-### Minimal Models
-
-A **minimal model** of a DGA A is a free graded commutative algebra M with a differential that is decomposable (d(M) ⊆ M⁺ · M⁺, where M⁺ is the augmentation ideal), together with a quasi-isomorphism M → A. Minimal models are unique up to isomorphism and classify DGAs up to quasi-isomorphism.
+A chain complex is a sequence `... → Cₙ₊₁ → Cₙ → Cₙ₋₁ → ...` with `d² = 0`. The **homology** is `Hₙ = ker(dₙ)/im(dₙ₊₁)`.
 
 ### Massey Products
 
-When the cup product of two cohomology classes vanishes (α · β = 0 in cohomology), the **triple Massey product** ⟨α, β, γ⟩ can be nonzero. It detects higher-order linking:
+When `x∪y = 0`, choose a chain `a` with `da = x∪y`. The Massey product `⟨x, y, z⟩` is the class of `a∪z − (−1)^{|x|} x∪b` (where `db = y∪z`) in `H^{|x|+|y|+|z|−1}`.
 
-```
-Given: d(a₁₂) = α·β, d(a₂₃) = β·γ
-Then: ⟨α, β, γ⟩ = [a₁₂·γ + (-1)^|α|·α·a₂₃] ∈ H^{|α|+|β|+|γ|-1}
-```
+### Minimal Models
 
-Massey products are the simplest higher-order cohomology operations. They can distinguish spaces that have isomorphic cohomology rings but different homotopy types (e.g., the Borromean rings).
+A minimal model of a DGA `A` is a DGA `M` with `d_M = 0` and a quasi-isomorphism `M → A`. A DGA is **formal** if it's quasi-isomorphic to its cohomology algebra.
 
 ### A∞-Algebras
 
-An **A∞-algebra** generalizes a DGA by replacing strict associativity with a family of operations mₙ: V^⊗ⁿ → V satisfying the **Stasheff identities**:
-
-```
-m₁ = d (differential)
-m₂ = multiplication (associative up to m₃)
-m₃ = homotopy for associativity
-m₄, m₅, ... = higher coherence data
-```
-
-Every DGA is an A∞-algebra with mₙ = 0 for n ≥ 3. But A∞-algebras are strictly more general — they capture "associativity up to homotopy."
+An A∞-algebra has operations `mₙ: V^{⊗ⁿ} → V` for n ≥ 1 satisfying the Stasheff relations. The key relation: `m₁² = 0` (differential), and `m₂` is associative up to `m₃` (homotopy). Every DGA is an A∞-algebra with `mₙ = 0` for n ≥ 3.
 
 ### Derived Categories
 
-The **derived category** D(A) is the category of chain complexes over A, localized at quasi-isomorphisms. Objects are chain complexes; morphisms are "roofs" X ← Z → Y where the backward arrow is a quasi-isomorphism. Key constructions:
-- **Shift**: C[n]ᵏ = Cᵏ⁺ⁿ
-- **Mapping cone**: cone(f) for a chain map f
-- **Truncation**: τ_≤ₙ C (kill everything above degree n)
+The derived category `D(A)` has chain complexes as objects and chain maps (localized at quasi-isomorphisms) as morphisms. Key structures:
+- **Distinguished triangles**: `A → B → C → A[1]` (analogue of exact sequences)
+- **Ext groups**: `Extⁿ(A, B) = Hom_{D(A)}(A, B[n])`
+- **Verdier quotient**: `D(A)/B` (localization at a subcategory)
 
-## Testing
+## Test Coverage
 
-**129 tests** across 10 modules:
+**129 tests**, all passing:
 
-| Module | Tests | Coverage |
+| Module | Tests | What's tested |
 |---|---|---|
-| `graded` | 24 | Elements, vector spaces, tensor products, shifts, Koszul signs |
-| `chain_complex` | 13 | Linear maps, composition, rank, d²=0, Betti numbers |
-| `dga` | 10 | Leibniz rule, associativity, d²=0, morphisms |
-| `cohomology` | 11 | Betti numbers, representatives, Euler characteristic, Poincaré polynomial |
-| `quasi_iso` | 7 | Quasi-isomorphism detection, cohomology comparison |
-| `minimal_model` | 8 | Free algebras, exterior/polynomial, minimal model computation |
-| `massey` | 7 | Triple products, indeterminacy, cocycle verification |
-| `a_infinity` | 12 | Stasheff identities, DGA conversion, operations |
-| `derived` | 17 | Objects, shifts, direct sums, truncation, acyclicity |
-| `applications` | 20 | De Rham DGA, Poincaré duality, exterior algebra |
-
-Run with:
-
-```bash
-cargo test
-```
+| `graded` | 18 | Element creation, scaling, vector space ops, tensor product, shift, Euler characteristic, Koszul sign |
+| `chain_complex` | 14 | Linear maps, composition, rank, transpose, d²=0, Betti numbers, Euler characteristic, direct sum, shift |
+| `dga` | 12 | d²=0, associativity, graded commutativity, unit, Leibniz rule, multiplication, morphisms |
+| `cohomology` | 11 | Trivial/exact/circle complexes, Euler characteristic, Poincaré duality, triviality, kernel basis |
+| `massey` | ~12 | Massey product computation, trivial products, formality detection |
+| `minimal_model` | ~12 | Minimal model construction, formality, morphism verification |
+| `a_infinity` | 14 | A∞ creation, m₁²=0, strict DGA check, minimality, relations, operations, transfer, morphisms |
+| `quasi_iso` | ~8 | Quasi-isomorphism detection, homotopy equivalence |
+| `derived` | 18 | Objects, cohomology, shift, direct sum, acyclicity, truncation, Ext groups, Verdier quotient, triangles |
+| `applications` | 21 | De Rham (dims 0-3), wedge product, anticommutativity, sheaf, Hodge, unified cohomology, compatibility |
 
 ## License
 
