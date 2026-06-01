@@ -1,0 +1,16 @@
+[package]
+name = "lau-dg-algebra"
+version = "0.1.0"
+edition = "2021"
+description = "Differential graded algebras for agents — the algebraic structure underlying cohomology"
+license = "MIT"
+repository = "https://github.com/SuperInstance/lau-dg-algebra"
+keywords = ["algebra", "dga", "cohomology", "homological-algebra", "dg-algebra"]
+categories = ["mathematics", "science"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+nalgebra = "0.33"
+
+[dev-dependencies]
+serde_json = "1"
